@@ -2,8 +2,13 @@
 Taking `EBS` snapshots is often a routine activity that is well suited to be automated using Lambda functions. So we are going to write a simple Boto3 script to trigger EBS Snapshots using AWS Lambda Functions
 
 In 3 simple steps, we are going to setup our serverless backup automation,
-- **Step 1** - Setup Lambda Function - _Copy & Paste `code` given below_
-  - _Optional - Manually you can test your Lambda Function_
+- **Step 1** - Setup Lambda Function - The Lambda Function will, (_`code` given below_)
+  - Find out `Instances` in the current `Region`
+  - Filter Instances based on `Tags` - In this case the key should be "**Backup** or "**backup**"
+  - Identify block devices attached to those instances
+  - Initiate Backup
+  - Add Tags to Snapshots
+  - Report Status
 - **Step 2** - Configure Lambda Triggers - Cloudwatch Events
 - **Step 3** - Verify EBS Snapshots in `EC2 Dashboard`
 
@@ -16,13 +21,8 @@ We will need the following pre-requisites to successfully complete this activity
 
 
 ## Step 1 - Lambda Backup Code
-This is what our `AWS Lambda` function is going to do in one region,
-- Find out `Instances` in the current `Region`
-  - Filter Instances based on `Tags` - In this case "**Backup** or "**backup**"
-- Find mapped block devices attached to those instances
-- Initiate Backup
-- Add Tags to Snapshots
-- Report Success
+Create a AWS Lambda Function, and choose `Python 2.7` as the run and copy paste the below code.
+
 _Change the global variables at the top of the script to suit your needs._
 ```py
 import boto3
@@ -72,7 +72,7 @@ def lambda_handler(event, context):
     return backupStatus
 ```
 
-## Step 2 - Configure Lambda Triggers
+## Step 2 - Configure `Cloudwatch Event` Lambda Triggers
 We are going to use Cloudwatch Scheduled Events to take backup everyday.
 ```
 rate(1 minute)
