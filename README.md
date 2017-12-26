@@ -21,7 +21,7 @@ We will need the following pre-requisites to successfully complete this activity
 
 
 ## Step 1 - Lambda Backup Code
-Create a AWS Lambda Function, and choose `Python 2.7` as the run and copy paste the below code.
+Create a AWS Lambda Function, and choose `Python 2.7` as the runtime and copy paste the below code.
 
 _Change the global variables at the top of the script to suit your needs._
 ```py
@@ -80,8 +80,11 @@ or
 rate(5 minutes)
 or
 rate(1 day)
+or
+# The below example creates a rule that is triggered every day at 12:00pm UTC.
+cron(0 12 * * ? *)
 ```
-Ref: [CloudWatch - Schedule Expressions for Rules](http://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html#RateExpressions)
+_If you want to learn more about the above Scheduled expressions,_ Ref: [CloudWatch - Schedule Expressions for Rules](http://docs.aws.amazon.com/AmazonCloudWatch/latest/events/ScheduledEvents.html#RateExpressions)
 
 ## Step 3 - Verify EBS Snapshots in Dashboard
 
