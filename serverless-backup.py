@@ -53,17 +53,18 @@ def backup_bot():
                 continue
             vol_id = dev['Ebs']['VolumeId']
 
-            #To get all the instance tags deatils
+            # Iterate Tags to collect the instance name tag
+            DescriptionTxt = ''
             for tag in instance['Tags']:
-                DescriptionTxt = ''
                 if tag['Key'] == 'Name' :
                     DescriptionTxt = tag['Value']
-            
+           
             snap = ec.create_snapshot( VolumeId=vol_id, Description=DescriptionTxt )
 
             to_tag[retention_days].append(snap['SnapshotId'])
 
             # Tag all the snaps that were created today with Deletion Date
+            # Processing "DeleteOn" here to allow for future case of each disk having its own Retention date
             for retention_days in to_tag.keys():
                 delete_date = datetime.date.today() + datetime.timedelta(days=retention_days)
                 # to mention the current date formet
