@@ -1,6 +1,9 @@
 # Serverless EBS Volume Snapshots using Lambda Functions
 Taking `EBS` snapshots is often a routine activity that is well suited to be automated using Lambda functions. So we are going to write a simple Boto3 script to trigger EBS Snapshots using AWS Lambda Functions
 
+### Watch Demo-In-Action in Youtube
+[Serverless EBS Volume Snapshots using Lambda](https://www.youtube.com/watch?v=cOlKr68bptk)
+
 In 3 simple steps, we are going to setup our serverless backup automation,
 - **Step 1** - Setup Lambda Function - The Lambda Function will, (_`code` given below_)
   - Find out `Instances` in the current `Region`
@@ -16,16 +19,19 @@ In 3 simple steps, we are going to setup our serverless backup automation,
 
 We will need the following pre-requisites to successfully complete this activity,
 ## Pre-Requisities
-- EC2 Server(s) - with Tag "Key = Backup" _(Value can be null or anything)_
+- EC2 Server(s) - with Tag "Key = BackUp" and "Value = Yes" _Remember the tag is case sensitive_
 - IAM Role - _i.e_ `Lambda Service Role` - _with_ `EC2FullAccess` _permissions_
 
 
 ## Step 1 - Lambda Backup Code
 Create a AWS Lambda Function, and choose `Python 2.7` as the runtime and copy paste the below code.
 
-_Change the global variables at the top of the script to suit your needs._
+_Change the global variables at the top of the script to suit your needs. For example change the default Rentention period the Backup Tag to filter etc_
 ```py
 import boto3
+import collections
+import datetime
+
 
 # Set the global variables
 globalVars  = {}
@@ -33,43 +39,86 @@ globalVars['Owner']                 = "Miztiik"
 globalVars['Environment']           = "Test"
 globalVars['REGION_NAME']           = "ap-south-1"
 globalVars['tagName']               = "Valaxy-Serverless-Automated-Backup"
-globalVars['findNeedle']            = ["backup", "Backup"]
+globalVars['findNeedle']            = "BackUp"
+globalVars['RetentionTag']          = "DeleteOn"
+globalVars['RetentionInDays']       = "70"
 
-ec2Client = boto3.client('ec2')
+#Please mention your region name
+ec = boto3.client('ec2', region_name='ap-south-1')
 
+def backup_bot():
 
-def lambda_handler(event, context):
-    reservations = ec2Client.describe_instances( Filters=[ {'Name': 'tag-key', 'Values': globalVars['findNeedle'] }] ).get('Reservations', [] )
+    snapsCreated = { 'Snapshots':[], }
 
-    print "Found {0} instances that need backing up".format( len(reservations) )
+    filters = [
+        {'Name': 'tag-key', 'Values': [ globalVars['findNeedle'] ]},
+        {'Name': 'tag-value', 'Values': ['Yes']},
+    ]
 
-    instances = sum([[i for i in r['Instances']] for r in reservations], [])
+    reservations = ec.describe_instances( Filters=filters ).get( 'Reservations', [] )
 
-    backupStatus=[]
+    instances = sum(
+        [
+            [i for i in r['Instances']]
+            for r in reservations
+        ], [])
+
+    # print "Number of the Instances : %d" % len(instances)
+    snapsCreated['InstanceCount']=len(instances)
+
+    to_tag = collections.defaultdict(list)
+
+    # Iterate for all Instances in the Region
     for instance in instances:
+        try:
+            retention_days = [
+                int(t.get('Value')) for t in instance['Tags']
+                if t['Key'] == 'Retention'][0]
+        except IndexError:
+            retention_days = int(globalVars['RetentionInDays'])
+
+        # Get all the Block Device Mappings
         for dev in instance['BlockDeviceMappings']:
             if dev.get('Ebs', None) is None:
                 continue
             vol_id = dev['Ebs']['VolumeId']
 
-            print 'Found EBS volume {0} on instance {1}'.format( vol_id, instance['InstanceId'])
+            # Iterate Tags to collect the instance name tag
+            DescriptionTxt = ''
+            for tag in instance['Tags']:
+                if tag['Key'] == 'Name' :
+                    DescriptionTxt = tag['Value']
 
-            snapShot = ec2Client.create_snapshot( VolumeId=vol_id )
+            snap = ec.create_snapshot( VolumeId=vol_id, Description=DescriptionTxt )
 
-            # Add tags to the snapshot
-            ec2Client.create_tags(Resources=[snapShot['SnapshotId'], ],
-                                  Tags=[{'Key': 'Name', 'Value': globalVars['tagName']}, ]
-                                  )
+            to_tag[retention_days].append(snap['SnapshotId'])
 
-            # Append to backup status update list
-            backupStatus.append({'InstanceId':instance['InstanceId'],
-                                 'VolumeId': vol_id,
-                                 'SnapshotId':snapShot['SnapshotId'],
-                                 'State':snapShot['State']
-                                }
-                               )
-    # Return the status of the backups triggered to log
-    return backupStatus
+            # Tag all the snaps that were created today with Deletion Date
+            # Processing "DeleteOn" here to allow for future case of each disk having its own Retention date
+            for retention_days in to_tag.keys():
+                delete_date = datetime.date.today() + datetime.timedelta(days=retention_days)
+                # to mention the current date formet
+                delete_fmt = delete_date.strftime('%Y-%m-%d')
+                # below code is create the name and current date as instance name
+                ec.create_tags(
+                                Resources=to_tag[retention_days],
+                                Tags=[
+                                        {'Key': globalVars['RetentionTag'], 'Value': delete_fmt},
+                                        {'Key': 'Name', 'Value': snap['Description'] },
+                                    ]
+                            )
+                snapsCreated['Snapshots'].append({ 'SnapshotId':snap['SnapshotId'], 'VolumeId' : vol_id, 'InstanceId' : instance['InstanceId'], 'DeleteOn': delete_fmt })
+
+        to_tag.clear()
+
+    return snapsCreated
+
+
+def lambda_handler(event, context):
+    return backup_bot()
+
+if __name__ == '__main__':
+    lambda_handler(None, None)
 ```
 
 ## Step 2 - Configure `Cloudwatch Event` Lambda Triggers
