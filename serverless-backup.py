@@ -102,8 +102,6 @@ def backup_bot():
             ec.create_tags(
                             Resources=[ snap['SnapshotID'] ],
                             Tags = snap['Tags']
-                            #Tags = snap['Tags'].append( {'Key': globalVars['RetentionTag'], 'Value': delete_fmt} )
-                            #Tags = [ { 'Key': globalVars['RetentionTag'], 'Value': snap[globalVars['RetentionTag']] } ]
                         )
     return snapsCreated
 
