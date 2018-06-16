@@ -6,26 +6,28 @@ import datetime
 # Set the global variables
 globalVars  = {}
 globalVars['Owner']                 = "Miztiik"
-globalVars['Environment']           = "Test"
-globalVars['REGION_NAME']           = "ap-south-1"
-globalVars['tagName']               = "Valaxy-Serverless-Automated-Backup"
+globalVars['Environment']           = "Development"
+globalVars['REGION_NAME']           = "eu-central-1"
+globalVars['tagName']               = "Serverless-Automated-Backup"
 globalVars['findNeedle']            = "BackUp"
 globalVars['RetentionTag']          = "DeleteOn"
 globalVars['RetentionInDays']       = "70"
 
-#Please mention your region name
-ec = boto3.client('ec2', region_name='ap-south-1')
+# Customize to your region as needed
+# ec = boto3.client('ec2', region_name='ap-south-1')
+ec = boto3.client('ec2')
 
 def backup_bot():
 
     snapsCreated = { 'Snapshots':[], }
+    snapsToTag = []
 
-    filters = [
-        {'Name': 'tag-key', 'Values': [ globalVars['findNeedle'] ]},
-        {'Name': 'tag-value', 'Values': ['Yes']},
-    ]
+    # Filter for instances having the needle tag
+    FILTER_1 = [
+        {'Name': 'tag:' + globalVars['findNeedle'],  'Values': ['Yes', 'yes', 'YES']}
+        ]
 
-    reservations = ec.describe_instances( Filters=filters ).get( 'Reservations', [] )
+    reservations = ec.describe_instances( Filters = FILTER_1 ).get( 'Reservations', [] )
 
     instances = sum(
         [
@@ -35,8 +37,6 @@ def backup_bot():
 
     # print "Number of the Instances : %d" % len(instances)
     snapsCreated['InstanceCount']=len(instances)
-
-    to_tag = collections.defaultdict(list)
 
     # Iterate for all Instances in the Region
     for instance in instances:
@@ -58,29 +58,40 @@ def backup_bot():
             for tag in instance['Tags']:
                 if tag['Key'] == 'Name' :
                     DescriptionTxt = tag['Value']
-           
-            snap = ec.create_snapshot( VolumeId=vol_id, Description=DescriptionTxt )
+       
 
-            to_tag[retention_days].append(snap['SnapshotId'])
-
-            # Tag all the snaps that were created today with Deletion Date
-            # Processing "DeleteOn" here to allow for future case of each disk having its own Retention date
-            for retention_days in to_tag.keys():
-                delete_date = datetime.date.today() + datetime.timedelta(days=retention_days)
+            try:
+                snap = ec.create_snapshot( VolumeId=vol_id, Description=DescriptionTxt )
+                
                 # to mention the current date formet
-                delete_fmt = delete_date.strftime('%Y-%m-%d')
+                delete_date = datetime.date.today() + datetime.timedelta( days = retention_days )
                 # below code is create the name and current date as instance name
-                ec.create_tags(
-                                Resources=to_tag[retention_days],
-                                Tags=[
-                                        {'Key': globalVars['RetentionTag'], 'Value': delete_fmt},
-                                        {'Key': 'Name', 'Value': snap['Description'] },
-                                    ]
-                            ) 
-                snapsCreated['Snapshots'].append({ 'SnapshotId':snap['SnapshotId'], 'VolumeId' : vol_id, 'InstanceId' : instance['InstanceId'], 'DeleteOn': delete_fmt })
-        
-        to_tag.clear()
-  
+                delete_fmt = delete_date.strftime('%Y-%m-%d')
+                
+                # Add the Deletion Tag to tag list
+                instance['Tags'].append( { 'Key': globalVars['RetentionTag'], 'Value': delete_fmt } )
+                snapsCreated['Snapshots'].append( {'SnapshotID':snap['SnapshotId'],
+                                                   'VolumeId' : vol_id,
+                                                   'InstanceId' : instance['InstanceId'],
+                                                   'Tags':instance['Tags'],
+                                                   'RetentionDays':retention_days,
+                                                   globalVars['RetentionTag']:delete_fmt 
+                                                   }
+                                                 )
+            except Exception as e:
+                snapsCreated['FailedSnaps'].append( {'VolumeId':vol_id, 'ERROR':str(e), 'Message':'Unable to trigger snapshot'})
+                pass
+
+
+        # Tag all the snaps that were created today with Deletion Date
+        # Processing "DeleteOn" here to allow for future case of each disk having its own Retention date
+        for snap in snapsCreated['Snapshots']:
+            ec.create_tags(
+                            Resources=[ snap['SnapshotID'] ],
+                            Tags = snap['Tags']
+                            #Tags = snap['Tags'].append( {'Key': globalVars['RetentionTag'], 'Value': delete_fmt} )
+                            #Tags = [ { 'Key': globalVars['RetentionTag'], 'Value': snap[globalVars['RetentionTag']] } ]
+                        )
     return snapsCreated
 
 
