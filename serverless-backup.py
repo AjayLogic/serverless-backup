@@ -1,5 +1,5 @@
 import boto3  
-import collections  
+import os, logging  
 import datetime
 
 
@@ -16,6 +16,7 @@ globalVars['RetentionInDays']       = "30"
 # Customize to your region as needed
 # ec = boto3.client('ec2', region_name='ap-south-1')
 ec = boto3.client('ec2')
+logger = logging.getLogger()
 
 """
 If User provides different values, override defaults
@@ -71,8 +72,6 @@ def backup_bot():
             for tag in instance['Tags']:
                 if tag['Key'] == 'Name' :
                     DescriptionTxt = tag['Value']
-       
-
             try:
                 snap = ec.create_snapshot( VolumeId=vol_id, Description=DescriptionTxt )
                 
