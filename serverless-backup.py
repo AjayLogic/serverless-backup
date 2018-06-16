@@ -11,11 +11,24 @@ globalVars['REGION_NAME']           = "eu-central-1"
 globalVars['tagName']               = "Serverless-Automated-Backup"
 globalVars['findNeedle']            = "BackUp"
 globalVars['RetentionTag']          = "DeleteOn"
-globalVars['RetentionInDays']       = "70"
+globalVars['RetentionInDays']       = "30"
 
 # Customize to your region as needed
 # ec = boto3.client('ec2', region_name='ap-south-1')
 ec = boto3.client('ec2')
+
+"""
+If User provides different values, override defaults
+"""
+def setGlobalVars():
+    try:
+        if os.environ['RetentionTag']:
+            globalVars['RetentionTag']  = os.environ['RetentionTag']
+        if os.environ['RetentionDays']:
+            globalVars['RetentionDays'] = os.environ['RetentionDays']
+    except KeyError as e:
+        logger.error("User Customization Environment variables are not set")
+        logger.error('ERROR: {0}'.format( str(e) ) )
 
 def backup_bot():
 
@@ -96,6 +109,7 @@ def backup_bot():
 
 
 def lambda_handler(event, context):
+    setGlobalVars()
     return backup_bot()
 
 if __name__ == '__main__':
