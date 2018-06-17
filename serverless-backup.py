@@ -33,7 +33,7 @@ def setGlobalVars():
 
 def backup_bot():
 
-    snapsCreated = { 'Snapshots':[], }
+    snapsCreated = { 'Snapshots':[], 'FailedSnaps':[] }
     snapsToTag = []
 
     # Filter for instances having the needle tag
